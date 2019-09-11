@@ -1,3 +1,14 @@
+"""
+デフォルトでは引用文献に記載された主引例（引用文献１）のみを取得する設定。
+198行目～200行目を
+preancestor = re.findall(
+    '[ 　0-9０-９]{1,2}.([特実再][許公開願表]{1,2}[昭平令]?[0-9０-９－ー-]+)',
+    m.group())
+と変更すれば全引用文献を取得するように変更できる。
+"""
+
+
+
 from selenium import webdriver
 from tkinter import Tk, Label, Entry, Button, StringVar
 from tkinter.font import Font
