@@ -26,7 +26,7 @@ def interface():
     dnum = StringVar()
     input1 = Entry(width=30, font=font1, textvariable=dnum)
 
-# 送信ボタン押下時の処理
+    # 送信ボタン押下時の処理
     def btn_click():
         text = dnum.get()
         if(text == ''):
@@ -106,7 +106,7 @@ def hitnumber(text):
     return result
 
 
-# 拒絶理由通知を取得する
+# 検索結果のボタンを押して拒絶理由通知を取得する
 def oagetter():
     """
     経過情報 : 'patentUtltyIntnlNumOnlyLst_tableView_progReferenceInfo0'
@@ -128,6 +128,98 @@ def oagetter():
     return OAText
 
 
+# 拒絶理由通知書のhtmlとフォルダを作成する
+def filecreator(OAText, dnum1, dirpath):
+    os.makedirs(dirpath, exist_ok=True)
+    filepath = os.path.join(dirpath, '%sOA.html' % dnum1)
+    with open(filepath, 'wt') as f:
+        f.write('<!DOCTYPE>\n<html>\n<pre>\n' +
+                OAText+'\n</pre>\n</html>')
+    return filepath
+
+
+# 引用文献に特許文献が存在したら取得する
+def doc_catcher(OAText):
+    match = re.search(r'適用条文.*?((\S)\2{8,}|先行技術文献調査結果)', OAText, re.DOTALL)
+    if(match is None):
+        alert('NoCitation')
+        sys.exit()
+    else:
+        p_cited = re.findall(
+            '[ 　０-９]{1,2}.([特実再][許公開願表]{1,2}[昭平令]?[0-9０-９－ー-]+)', match.group())
+        print('日本の引用特許文献は', p_cited)
+        usp_cited = re.findall(
+            '[ 　０-９]{1,2}.米国特許第([0-9０-９]+)号', match.group())
+        print('米国の引用特許文献は', usp_cited)
+        return p_cited, usp_cited
+
+
+# 日本特許文献に対してリンクを取得しhtmlにリンクを張る
+def jp_doc_linker(p_cited, filepath):
+    driver.switch_to.window(driver.window_handles[0])
+    time.sleep(1)
+    driver.find_element_by_id(
+        's01_srchCondtn_txtSimpleSearch').clear()
+    for pdoc in p_cited:
+        driver.find_element_by_id(
+            's01_srchCondtn_txtSimpleSearch').send_keys(pdoc+' ')
+    driver.find_element_by_id('s01_srchBtn_btnSearch').click()
+    with open(filepath) as f:
+        filedata = f.read()
+    for pnum in range(len(p_cited)):
+        time.sleep(1)
+        driver.find_element_by_id(
+            'patentUtltyIntnlNumOnlyLst_tableView_url'+str(pnum)).click()
+        driver.switch_to.window(driver.window_handles[-1])
+        driver.find_element_by_id('btnClose').click()
+        driver.switch_to.window(driver.window_handles[-1])
+        filedata = filedata.replace(p_cited[pnum], '<a href='+pyperclip.paste() +
+                                    ', target=_blanck>'+p_cited[pnum]+'</a>')
+    with open(filepath, 'w') as f:
+        f.write(filedata)
+
+
+# 米国特許文献に対してリンクを取得しhtmlにリンクを張る
+def us_doc_linker(usp_cited, filepath):
+    driver.switch_to.window(driver.window_handles[0])
+    driver.get('https://www.j-platpat.inpit.go.jp/p0000')
+    for i, uspdoc in enumerate(usp_cited):
+        time.sleep(1)
+        driver.find_element_by_id(
+            "p00_srchCondtn_btnDocNoInputCountry"+str(i)).click()
+        driver.switch_to.window(driver.window_handles[-1])
+        time.sleep(1)
+        driver.find_element_by_xpath(
+            u"(//a[contains(text(), 'アメリカ(US)')])").click()
+        driver.switch_to.window(driver.window_handles[-1])
+        time.sleep(1)
+        driver.find_element_by_id(
+            "p00_srchCondtn_btnDocNoInputType"+str(i)).click()
+        driver.switch_to.window(driver.window_handles[-1])
+        time.sleep(1)
+        driver.find_element_by_xpath(
+            u"(//a[contains(text(), '特許番号(A/B)')])").click()
+        driver.switch_to.window(driver.window_handles[-1])
+        time.sleep(1)
+        driver.find_element_by_id(
+            "p00_srchCondtn_txtDocNoInputNo"+str(i)).send_keys(uspdoc)
+    driver.find_element_by_id(
+        "p00_searchBtn_btnDocInquiry").click()
+    with open(filepath) as f:
+        filedata = f.read()
+    for uspnum in range(len(usp_cited)):
+        time.sleep(1)
+        driver.find_element_by_id(
+            "patentUtltyIntnlSimpleBibLst_tableView_url"+str(uspnum)).click()
+        driver.switch_to.window(driver.window_handles[-1])
+        driver.find_element_by_id('btnClose').click()
+        driver.switch_to.window(driver.window_handles[-1])
+        filedata = filedata.replace('米国特許第'+usp_cited[uspnum], '<a href='+pyperclip.paste() +
+                                    ', target=_blanck>米国特許第'+usp_cited[uspnum]+'</a>')
+    with open(filepath, 'w') as f:
+        f.write(filedata)
+
+
 if __name__ == '__main__':
 
     # 検索結果が１件になるまでデータ入力を繰り返す。
@@ -144,94 +236,28 @@ if __name__ == '__main__':
         else:
             sys.exit()
 
-    # 拒絶理由通知が取得できたらhtmlファイルに保存する
+    # フォルダを作成する際のpathを決定
+    dirpath = os.path.join(os.getcwd(), '%sOA' % dnum1)
+
+    # 拒絶理由通知書を取得する
     OAText = oagetter()
+
     if(OAText is None):
         alert('NoOfficeAction')
         sys.exit()
     else:
-        dirpath = os.path.join(os.getcwd(), '%sOA' % dnum1)
-        os.makedirs(dirpath, exist_ok=True)
-        with open(os.path.join(dirpath, '%sOA.html' % dnum1), 'wt') as f:
-            f.write('<!DOCTYPE>\n<html>\n<pre>\n'+OAText+'\n</pre>\n</html>')
+        # 拒絶理由通知書のhtmlファイルとフォルダを作成する
+        filepath = filecreator(OAText, dnum1, dirpath)
 
-    # 引用文献に特許文献が存在したら取得する
-    m = re.search(r'適用条文.*?((\S)\2{8,}|先行技術文献調査結果)', OAText, re.DOTALL)
-    if(m is None):
-        alert('NoCitation')
-        sys.exit()
-    else:
-        p_cited = re.findall(
-            '[ 　０-９]{1,2}.([特実再][許公開願表]{1,2}[昭平令]?[0-9０-９－ー-]+)', m.group())
-        print('日本の引用特許文献は', p_cited)
-        usp_cited = re.findall(
-            '[ 　０-９]{1,2}.米国特許第([0-9０-９]+)号', m.group())
-        print('米国の引用特許文献は', usp_cited)
+        # 拒絶理由通知書から日本語特許文献のリストと外国語特許文献のリストを取得する
+        p_cited, usp_cited = doc_catcher(OAText)
 
-        # 日本特許文献に対してリンクを取得しhtmlにリンクを張る
         if(p_cited):
-            driver.switch_to.window(driver.window_handles[0])
-            time.sleep(1)
-            driver.find_element_by_id(
-                's01_srchCondtn_txtSimpleSearch').clear()
-            for pdoc in p_cited:
-                driver.find_element_by_id(
-                    's01_srchCondtn_txtSimpleSearch').send_keys(pdoc+' ')
-            driver.find_element_by_id('s01_srchBtn_btnSearch').click()
-            time.sleep(2)
-            with open(os.path.join(dirpath, '%sOA.html' % dnum1)) as f:
-                filedata = f.read()
-            for pnum in range(len(p_cited)):
-                time.sleep(1)
-                driver.find_element_by_id(
-                    'patentUtltyIntnlNumOnlyLst_tableView_url'+str(pnum)).click()
-                driver.switch_to.window(driver.window_handles[-1])
-                driver.find_element_by_id('btnClose').click()
-                filedata = filedata.replace(p_cited[pnum], '<a href='+pyperclip.paste() +
-                                            ', target=_blanck>'+p_cited[pnum]+'</a>')
-            with open(os.path.join(dirpath, '%sOA.html' % dnum1), 'w') as f:
-                f.write(filedata)
+            jp_doc_linker(p_cited, filepath)
 
-        # 米国特許文献が含まれる場合リンクを取得してhtmlにリンクを張る
         if(usp_cited):
-            driver.switch_to.window(driver.window_handles[0])
-            driver.get('https://www.j-platpat.inpit.go.jp/p0000')
-            for i, uspdoc in enumerate(usp_cited):
-                time.sleep(1)
-                driver.find_element_by_id(
-                    "p00_srchCondtn_btnDocNoInputCountry"+str(i)).click()
-                driver.switch_to.window(driver.window_handles[-1])
-                time.sleep(1)
-                driver.find_element_by_xpath(
-                    u"(//a[contains(text(), 'アメリカ(US)')])").click()
-                driver.switch_to.window(driver.window_handles[-1])
-                time.sleep(1)
-                driver.find_element_by_id(
-                    "p00_srchCondtn_btnDocNoInputType"+str(i)).click()
-                driver.switch_to.window(driver.window_handles[-1])
-                time.sleep(1)
-                driver.find_element_by_xpath(
-                    u"(//a[contains(text(), '特許番号(A/B)')])").click()
-                driver.switch_to.window(driver.window_handles[-1])
-                time.sleep(1)
-                driver.find_element_by_id(
-                    "p00_srchCondtn_txtDocNoInputNo"+str(i)).send_keys(uspdoc)
-            driver.find_element_by_id(
-                "p00_searchBtn_btnDocInquiry").click()
-            time.sleep(2)
-            with open(os.path.join(dirpath, '%sOA.html' % dnum1)) as f:
-                filedata = f.read()
-            for uspnum in range(len(usp_cited)):
-                time.sleep(1)
-                driver.find_element_by_id(
-                    "patentUtltyIntnlSimpleBibLst_tableView_url"+str(uspnum)).click()
-                driver.switch_to.window(driver.window_handles[-1])
-                driver.find_element_by_id('btnClose').click()
-                filedata = filedata.replace('米国特許第'+usp_cited[uspnum], '<a href='+pyperclip.paste() +
-                                            ', target=_blanck>米国特許第'+usp_cited[uspnum]+'</a>')
-            with open(os.path.join(dirpath, '%sOA.html' % dnum1), 'w') as f:
-                f.write(filedata)
+            us_doc_linker(usp_cited, filepath)
 
-    # 処理の完了を通知
-    alert('Complete')
-    sys.exit()
+        # 処理の完了を通知
+        alert('Complete')
+        sys.exit()
