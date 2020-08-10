@@ -7,7 +7,6 @@
 
 - このプログラムを改変したPatAncestorというプログラムもあります。拒絶理由通知書から主引例を辿って、大元の文献を探すプログラムです。
 
-- このプログラムは[github](https://github.com/inusarukiji/jpo_automation)にもあります。
 
 
 # 概要
